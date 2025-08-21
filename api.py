@@ -1,10 +1,22 @@
 # Comando para iniciar api: python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
 import os
+import sys
+from pathlib import Path
+
+# Detectar se está rodando na Vercel
+IS_VERCEL = os.environ.get('VERCEL') == '1' or os.environ.get('NOW_REGION') is not None
+
+# Configurações específicas para Vercel
+if IS_VERCEL:
+    # Adicionar o diretório atual ao path
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from data_handler import SinespDataHandler
 from typing import Optional, List, Dict, Any
 import pandas as pd
 import numpy as np
@@ -13,12 +25,24 @@ import io
 import tempfile
 import time
 
-# Detectar se está rodando na Vercel
-IS_VERCEL = os.environ.get('VERCEL') == '1' or os.environ.get('NOW_REGION') is not None
-
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Importar o handler de dados após configurar o path
+try:
+    from data_handler import SinespDataHandler
+except ImportError as e:
+    logger.error(f"Erro ao importar SinespDataHandler: {e}")
+    if IS_VERCEL:
+        # No Vercel, tentar importar de forma alternativa
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("data_handler", Path(__file__).parent / "data_handler.py")
+        data_handler_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(data_handler_module)
+        SinespDataHandler = data_handler_module.SinespDataHandler
+    else:
+        raise
 
 # Cache global para handler (importante para Vercel)
 _global_handler = None
@@ -29,6 +53,7 @@ def get_handler():
     
     if _global_handler is None:
         try:
+            logger.info("Inicializando SinespDataHandler...")
             _global_handler = SinespDataHandler()
             logger.info("SinespDataHandler inicializado com sucesso")
         except Exception as e:
@@ -38,7 +63,13 @@ def get_handler():
     return _global_handler
 
 # Inicializar handler apenas se não for Vercel (na Vercel será lazy-loaded)
-handler = None if IS_VERCEL else get_handler()
+handler = None
+if not IS_VERCEL:
+    try:
+        handler = get_handler()
+    except Exception as e:
+        logger.error(f"Erro na inicialização: {e}")
+        handler = None
 
 app = FastAPI(
     title="API SINESP VDE", 
@@ -126,9 +157,9 @@ def homepage_api(request: Request):
 def status(request: Request):
     """Healthcheck da API com informações de status"""
     try:
-        check_handler()
-        total_registros = len(handler.df) if handler.df is not None else 0
-        memoria = handler.get_memory_usage()
+        current_handler = check_handler()
+        total_registros = len(current_handler.df) if current_handler and current_handler.df is not None else 0
+        memoria = current_handler.get_memory_usage() if current_handler else {"dataframe_size_mb": 0}
         
         return {
             "status": "ok",
@@ -157,10 +188,10 @@ def status(request: Request):
 def info_detalhada(request: Request):
     """Informações detalhadas sobre a API e dados disponíveis"""
     try:
-        check_handler()
-        total_registros = len(handler.df) if handler.df is not None else 0
-        colunas_disponiveis = list(handler.df.columns) if handler.df is not None else []
-        anos_disponiveis = handler.get_anos_disponiveis() if handler.df is not None else []
+        current_handler = check_handler()
+        total_registros = len(current_handler.df) if current_handler and current_handler.df is not None else 0
+        colunas_disponiveis = list(current_handler.df.columns) if current_handler and current_handler.df is not None else []
+        anos_disponiveis = current_handler.get_anos_disponiveis() if current_handler and current_handler.df is not None else []
         
         return {
             "api": {
@@ -221,22 +252,31 @@ def check_handler():
     """Verifica se o handler está disponível"""
     global handler
     
-    if IS_VERCEL:
-        handler = get_handler()
-    
-    if handler is None:
-        raise HTTPException(status_code=503, detail="Sistema de dados não disponível. Verifique se existem arquivos de dados.")
+    try:
+        if IS_VERCEL:
+            handler = get_handler()
+        
+        if handler is None:
+            raise HTTPException(status_code=503, detail="Sistema de dados não disponível. Verifique se existem arquivos de dados.")
+        
+        return handler
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro em check_handler: {e}")
+        raise HTTPException(status_code=503, detail="Sistema de dados não disponível.")
 
 def safe_get_unique_values(column_name: str, sort_values: bool = True):
     """Função auxiliar para obter valores únicos de uma coluna com segurança"""
-    check_handler()
-    
-    if column_name not in handler.df.columns:
-        return []
-    
     try:
+        current_handler = check_handler()
+        df = current_handler.df
+        
+        if column_name not in df.columns:
+            return []
+        
         # Obter valores únicos removendo NaN e valores vazios
-        series = handler.df[column_name].dropna()
+        series = df[column_name].dropna()
         
         # Converter para string e limpar
         if len(series) > 0:
@@ -265,8 +305,8 @@ def safe_get_unique_values(column_name: str, sort_values: bool = True):
 def safe_numeric_operation(column_name, operation="sum", default_value=0):
     """Operação numérica segura em uma coluna"""
     try:
-        check_handler()
-        df = handler.df
+        current_handler = check_handler()
+        df = current_handler.df
         
         if column_name not in df.columns:
             logger.warning(f"Coluna '{column_name}' não encontrada")
@@ -305,8 +345,8 @@ def safe_numeric_operation(column_name, operation="sum", default_value=0):
 def info():
     """Informações gerais sobre a API e dados disponíveis"""
     try:
-        check_handler()
-        total_registros = len(handler.df) if handler.df is not None else 0
+        current_handler = check_handler()
+        total_registros = len(current_handler.df) if current_handler and current_handler.df is not None else 0
         
         return {
             "api": "SINESP VDE 2015-2025",
@@ -443,8 +483,8 @@ def get_ufs(request: Request):
 def get_municipios(request: Request, uf: Optional[str] = Query(None, description="Filtrar por UF")):
     """Lista municípios, opcionalmente filtrados por UF"""
     try:
-        check_handler()
-        df = handler.df
+        current_handler = check_handler()
+        df = current_handler.df
         
         if uf:
             # Filtrar por UF
@@ -522,8 +562,8 @@ def buscar_ocorrencias(
 ):
     """Busca ocorrências com filtros opcionais e paginação"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -593,8 +633,8 @@ def resumo_vitimas(
 ):
     """Totais de vítimas com filtros opcionais"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -642,8 +682,8 @@ def resumo_faixa_etaria(
 ):
     """Distribuição de vítimas por faixa etária"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -688,8 +728,8 @@ def resumo_armas(
 ):
     """Estatísticas por tipo de arma"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -744,8 +784,8 @@ def resumo_agentes(
 ):
     """Estatísticas por tipo de agente"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -803,8 +843,8 @@ def serie_temporal_ocorrencias(
 ):
     """Evolução temporal (ano a ano) do total de vítimas"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -874,8 +914,8 @@ def ranking_ufs_violencia(
 ):
     """Ranking das UFs com maior número de casos de violência"""
     try:
-        check_handler()
-        df = handler.df
+        current_handler = check_handler()
+        df = current_handler.df
         
         # Agrupar por UF e somar as vítimas
         ranking = df.groupby('uf')['total_vitima'].sum().reset_index()
@@ -913,8 +953,8 @@ def download_csv(
 ):
     """Exporta os dados filtrados como arquivo CSV"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -980,8 +1020,8 @@ def download_json(
 ):
     """Exporta os dados filtrados como arquivo JSON"""
     try:
-        check_handler()
-        df = handler.df.copy()
+        current_handler = check_handler()
+        df = current_handler.df.copy()
         
         # Aplicar filtros
         if uf:
@@ -1062,8 +1102,8 @@ def download_json(
 def estatisticas_resumo(request: Request):
     """Estatísticas gerais do dataset"""
     try:
-        check_handler()
-        df = handler.df
+        current_handler = check_handler()
+        df = current_handler.df
         
         stats = {
             "total_registros": len(df),
@@ -1105,8 +1145,8 @@ def get_armas_legacy(request: Request):
 def get_anos(request: Request):
     """Lista todos os anos disponíveis nos dados"""
     try:
-        check_handler()
-        anos = handler.get_anos_disponiveis()
+        current_handler = check_handler()
+        anos = current_handler.get_anos_disponiveis()
         return {"anos": anos, "total": len(anos), "status": "sucesso"}
     except Exception as e:
         logger.error(f"Erro em get_anos: {e}")
