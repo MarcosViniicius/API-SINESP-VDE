@@ -11,18 +11,10 @@ import numpy as np
 import logging
 import io
 import tempfile
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 import time
 
 # Detectar se está rodando na Vercel
 IS_VERCEL = os.environ.get('VERCEL') == '1' or os.environ.get('NOW_REGION') is not None
-
-# Configurar rate limiting (mais restritivo na Vercel)
-rate_limit = "50/minute" if IS_VERCEL else "100/minute"
-limiter = Limiter(key_func=get_remote_address)
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -78,18 +70,11 @@ app = FastAPI(
     - **Exportação**: `/download/csv`, `/download/json`
     
     **⚠️ Importante:** Alguns indicadores podem ter múltiplas linhas no mesmo mês (somar valores).
-    
-    **🛡️ Rate Limiting:** 50 requests/minuto por IP na Vercel para proteger o serviço.
     """,
     docs_url="/",  # Página principal será a documentação
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
-
-# Adicionar middlewares
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 # CORS middleware
 app.add_middleware(
