@@ -1,5 +1,5 @@
 from mangum import Mangum
-from api_simple import app
+from api import app
 
 # Handler principal para Vercel
 handler = Mangum(app, lifespan="off")

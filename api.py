@@ -86,7 +86,6 @@ app.add_middleware(
 )
 
 @app.get("/api/home", summary="Informações da API", tags=["Metadados"])
-@limiter.limit(rate_limit)
 def homepage_api(request: Request):
     """Informações da API (endpoint legacy)"""
     return {
@@ -114,7 +113,7 @@ def homepage_api(request: Request):
         },
         
         "observacoes": [
-            f"Rate limiting: {rate_limit} por IP",
+            f"Rate limiting: {"50/minute"} por IP",
             "Alguns indicadores podem ter múltiplas linhas no mesmo mês",
             "Para dados oficiais, sempre consultar fontes governamentais"
         ],
@@ -124,7 +123,6 @@ def homepage_api(request: Request):
     }
 
 @app.get("/status", summary="Status da API", tags=["Metadados"])
-@limiter.limit(rate_limit)
 def status(request: Request):
     """Healthcheck da API com informações de status"""
     try:
@@ -141,7 +139,7 @@ def status(request: Request):
             "ultima_atualizacao_dados": "20/08/2025",
             "periodo_cobertura": "2015-2025",
             "uptime": "online",
-            "rate_limiting": f"{rate_limit}"
+            "rate_limiting": f"{"50/minute"}"
         }
     except Exception as e:
         logger.error(f"Erro em /status: {e}")
@@ -156,7 +154,6 @@ def status(request: Request):
         )
 
 @app.get("/info", summary="Informações detalhadas da API", tags=["Metadados"])
-@limiter.limit(rate_limit)
 def info_detalhada(request: Request):
     """Informações detalhadas sobre a API e dados disponíveis"""
     try:
@@ -331,7 +328,6 @@ def info():
         raise HTTPException(status_code=500, detail="Erro ao obter informações da API")
 
 @app.get("/metodologia", summary="Metodologia e Notas Técnicas", tags=["Informações"])
-@limiter.limit(rate_limit)
 def metodologia(request: Request):
     """Informações metodológicas detalhadas sobre os dados do SINESP VDE"""
     return {
@@ -434,7 +430,6 @@ def metodologia(request: Request):
     }
 
 @app.get("/ufs", summary="Lista de UFs", tags=["Dimensões"])
-@limiter.limit(rate_limit)
 def get_ufs(request: Request):
     """Lista todas as UFs disponíveis"""
     try:
@@ -445,7 +440,6 @@ def get_ufs(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de UFs")
 
 @app.get("/municipios", summary="Lista de municípios", tags=["Dimensões"])
-@limiter.limit(rate_limit)
 def get_municipios(request: Request, uf: Optional[str] = Query(None, description="Filtrar por UF")):
     """Lista municípios, opcionalmente filtrados por UF"""
     try:
@@ -475,7 +469,6 @@ def get_municipios(request: Request, uf: Optional[str] = Query(None, description
         raise HTTPException(status_code=500, detail="Erro ao obter lista de municípios")
 
 @app.get("/eventos", summary="Lista de tipos de eventos", tags=["Dimensões"])
-@limiter.limit("60/minute")
 def get_eventos(request: Request):
     """Lista todos os tipos de eventos/ocorrências"""
     try:
@@ -486,7 +479,6 @@ def get_eventos(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de eventos")
 
 @app.get("/agentes", summary="Lista de agentes", tags=["Dimensões"])
-@limiter.limit("60/minute")
 def get_agentes(request: Request):
     """Lista todos os tipos de agentes envolvidos"""
     try:
@@ -497,7 +489,6 @@ def get_agentes(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de agentes")
 
 @app.get("/armas", summary="Lista de armas", tags=["Dimensões"])
-@limiter.limit("60/minute")
 def get_armas(request: Request):
     """Lista todos os tipos de armas"""
     try:
@@ -508,7 +499,6 @@ def get_armas(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de armas")
 
 @app.get("/faixas-etarias", summary="Lista de faixas etárias", tags=["Dimensões"])
-@limiter.limit("60/minute")
 def get_faixas_etarias(request: Request):
     """Lista todas as categorias de faixa etária"""
     try:
@@ -519,7 +509,6 @@ def get_faixas_etarias(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de faixas etárias")
 
 @app.get("/ocorrencias", summary="Buscar ocorrências", tags=["Consultas"])
-@limiter.limit("30/minute")
 def buscar_ocorrencias(
     request: Request,
     uf: Optional[str] = Query(None, description="UF"),
@@ -596,7 +585,6 @@ def buscar_ocorrencias(
 # ==== ENDPOINTS DE RESUMOS ESTATÍSTICOS ====
 
 @app.get("/resumo/vitimas", summary="Resumo de vítimas", tags=["Resumos"])
-@limiter.limit("30/minute")
 def resumo_vitimas(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -647,7 +635,6 @@ def resumo_vitimas(
         raise HTTPException(status_code=500, detail="Erro ao gerar resumo de vítimas")
 
 @app.get("/resumo/faixa-etaria", summary="Resumo por faixa etária", tags=["Resumos"])
-@limiter.limit("30/minute")
 def resumo_faixa_etaria(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -694,7 +681,6 @@ def resumo_faixa_etaria(
         raise HTTPException(status_code=500, detail="Erro ao gerar resumo por faixa etária")
 
 @app.get("/resumo/armas", summary="Resumo por tipo de arma", tags=["Resumos"])
-@limiter.limit("30/minute")
 def resumo_armas(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -751,7 +737,6 @@ def resumo_armas(
         raise HTTPException(status_code=500, detail="Erro ao gerar resumo de armas")
 
 @app.get("/resumo/agentes", summary="Resumo por tipo de agente", tags=["Resumos"])
-@limiter.limit("30/minute")
 def resumo_agentes(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -810,7 +795,6 @@ def resumo_agentes(
 # ==== ENDPOINTS DE SÉRIES TEMPORAIS ====
 
 @app.get("/series/ocorrencias", summary="Série temporal de ocorrências", tags=["Séries Temporais"])
-@limiter.limit("20/minute")
 def serie_temporal_ocorrencias(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -884,7 +868,6 @@ def serie_temporal_ocorrencias(
         raise HTTPException(status_code=500, detail="Erro ao gerar série temporal")
 
 @app.get("/ranking/ufs-violencia", summary="Ranking de UFs por violência", tags=["Estatísticas"])
-@limiter.limit("30/minute")
 def ranking_ufs_violencia(
     request: Request,
     limit: int = Query(27, ge=1, le=50, description="Limite de resultados")
@@ -920,7 +903,6 @@ def ranking_ufs_violencia(
 # ==== ENDPOINTS DE EXPORTAÇÃO ====
 
 @app.get("/download/csv", summary="Exportar dados como CSV", tags=["Exportação"])
-@limiter.limit("5/minute")
 def download_csv(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -988,7 +970,6 @@ def download_csv(
         raise HTTPException(status_code=500, detail="Erro ao gerar arquivo CSV")
 
 @app.get("/download/json", summary="Exportar dados como JSON", tags=["Exportação"])
-@limiter.limit("5/minute") 
 def download_json(
     request: Request,
     uf: Optional[str] = Query(None, description="Filtrar por UF"),
@@ -1078,7 +1059,6 @@ def download_json(
         raise HTTPException(status_code=500, detail="Erro ao gerar arquivo JSON")
 
 @app.get("/estatisticas/resumo", summary="Estatísticas gerais", tags=["Estatísticas"])
-@limiter.limit("30/minute")
 def estatisticas_resumo(request: Request):
     """Estatísticas gerais do dataset"""
     try:
@@ -1102,7 +1082,6 @@ def estatisticas_resumo(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao gerar estatísticas de resumo")
 
 @app.get("/agentes", summary="Lista de agentes", tags=["Dados"])
-@limiter.limit("60/minute")
 def get_agentes_legacy(request: Request):
     """Lista todos os tipos de agentes (endpoint legacy)"""
     try:
@@ -1113,7 +1092,6 @@ def get_agentes_legacy(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de agentes")
 
 @app.get("/armas", summary="Lista de armas", tags=["Dados"])
-@limiter.limit("60/minute")
 def get_armas_legacy(request: Request):
     """Lista todos os tipos de armas (endpoint legacy)"""
     try:
@@ -1124,7 +1102,6 @@ def get_armas_legacy(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de armas")
 
 @app.get("/anos", summary="Lista de anos disponíveis", tags=["Dados"])
-@limiter.limit("60/minute")
 def get_anos(request: Request):
     """Lista todos os anos disponíveis nos dados"""
     try:
@@ -1136,7 +1113,6 @@ def get_anos(request: Request):
         raise HTTPException(status_code=500, detail="Erro ao obter lista de anos")
 
 @app.get("/estatisticas/por-uf", summary="Estatísticas por UF", tags=["Estatísticas"])
-@limiter.limit("30/minute")
 def estatisticas_por_uf(request: Request, uf: str = Query(..., description="UF para consulta")):
     """Estatísticas detalhadas por UF"""
     try:
@@ -1172,7 +1148,6 @@ def estatisticas_por_uf(request: Request, uf: str = Query(..., description="UF p
         raise HTTPException(status_code=500, detail="Erro ao gerar estatísticas por UF")
 
 @app.get("/estatisticas/por-ano", summary="Estatísticas por ano", tags=["Estatísticas"])
-@limiter.limit("30/minute")
 def estatisticas_por_ano(request: Request, ano: int = Query(..., description="Ano para consulta")):
     """Estatísticas detalhadas por ano"""
     try:
@@ -1341,7 +1316,6 @@ def bases_dados_oficiais():
     }
 
 @app.get("/classificacoes/criminais", summary="Classificações de crimes no SINESP VDE", tags=["Informações"])
-@limiter.limit("30/minute")
 def classificacoes_criminais(request: Request):
     """Classificações detalhadas dos tipos criminais conforme metodologia SINESP VDE"""
     return {
