@@ -1,4 +1,4 @@
-# API SINESP VDE - Violência Doméstica e Familiar
+# API de consultas de dados públicos do SINESP-VDE - Violência Doméstica e Familiar
 
 API REST para consulta de dados de violência doméstica e familiar do Sistema Nacional de Informações de Segurança Pública (SINESP).
 
